@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Club Global de Líderes</title>
+<meta name="description" content="Club Global de Líderes: rede de líderes, executivos e empreendedores. Eventos exclusivos, oportunidades de negócio, networking internacional e cartão de membro digital.">
+<meta name="theme-color" content="#08122a">
+<meta property="og:title" content="Club Global de Líderes">
+<meta property="og:description" content="Onde os líderes se encontram: eventos, oportunidades e networking global.">
+<meta property="og:image" content="img/logo-cgl.svg">
+<link rel="icon" href="img/logo-cgl.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css">
+<script>try{var t=localStorage.getItem("cgl-tema");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}</script>
+</head>
+<body>
+<a class="skip" href="#main">Saltar para o conteúdo</a>
+<header class="top">
+  <div class="wrap top__in">
+    <a class="brand" href="#/" aria-label="Club Global de Líderes — início"><img src="img/logo-cgl.svg" alt=""><span>Club Global<small>de Líderes</small></span></a>
+    <div class="top__tools"><button class="tema-btn" type="button" id="temaBtn" aria-label="Mudar tema"></button>
+    <button class="menu-btn" type="button" aria-label="Abrir menu" aria-expanded="false" aria-controls="nav"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button></div>
+    <nav class="nav" id="nav" aria-label="Principal">
+      <a href="#/sobre" data-nav="sobre">O clube</a>
+      <a href="#/eventos" data-nav="eventos">Eventos</a>
+      <a href="#/oportunidades" data-nav="oportunidades">Oportunidades</a>
+      <a href="#/membros" data-nav="membros">Líderes</a>
+      <a href="#/noticias" data-nav="noticias">Notícias</a>
+      <a href="#/beneficios" data-nav="beneficios">Benefícios</a>
+      <span id="navConta"></span>
+    </nav>
+  </div>
+</header>
+<div class="bar"></div>
+<main id="main" tabindex="-1"></main>
+<div class="bar"></div>
+<footer class="foot">
+  <div class="wrap foot__grid">
+    <div><a class="brand" href="#/" style="color:#fff"><img src="img/logo-cgl.svg" alt=""><span>Club Global<small>de Líderes</small></span></a><p id="fMissao"></p></div>
+    <div><h4>O clube</h4><a href="#/sobre">Sobre e conselho</a><a href="#/eventos">Agenda de eventos</a><a href="#/noticias">Notícias e artigos</a><a href="#/contacto">Contacto</a></div>
+    <div><h4>Membros</h4><a href="#/adesao">Candidatar-me</a><a href="#/membros">Directório de líderes</a><a href="#/oportunidades">Oportunidades</a><a href="#/beneficios">Benefícios</a><a href="#/conta">Área do membro</a><a href="#/verificar">Verificar cartão</a></div>
+    <div><h4>Contacto</h4><div id="fContactos"></div></div>
+  </div>
+  <div class="wrap foot__base">© <span id="fAno"></span> Club Global de Líderes</div>
+</footer>
+<div id="modal" class="modal" hidden><div class="modal__box" role="dialog" aria-modal="true" aria-labelledby="mTitle"><button class="modal__x" type="button" aria-label="Fechar" data-close>&times;</button><div id="mBody"></div></div></div>
+<script src="vendor/supabase.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
