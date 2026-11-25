@@ -1,8 +1,31 @@
 /* Club Global de Líderes — plataforma do clube (público, área do membro, administração). */
 (function () {
   "use strict";
-  var SB_URL = "https://CGL-PROJECTO.supabase.co";
+  var SB_URL = "https://CGL-PROJECTO.supabase.co"; /* substituir pelo projecto Supabase */
   var SB_KEY = "CGL-CHAVE-PUBLICA";
+  /* Enquanto a base de dados não está ligada, o site funciona em modo de apresentação. */
+  var DEMO = SB_URL.indexOf("CGL-PROJECTO") >= 0;
+  if (DEMO) {
+    SB_URL = "https://demo.invalid";
+    var DEMO_DADOS = {
+      definicoes: [{ chave: "planos", valor: [{ id: "jovem", nome: "Jovem Líder", descricao: "Até 35 anos: estudantes, jovens profissionais e empreendedores", valor: 25000, periodo: "anual" }, { id: "executivo", nome: "Membro Executivo", descricao: "Executivos, empresários e líderes de organizações", valor: 120000, periodo: "anual" }, { id: "platinum", nome: "Membro Platinum", descricao: "Acesso prioritário a todos os eventos, mesas de CEOs e delegações internacionais", valor: 450000, periodo: "anual" }, { id: "corporativo", nome: "Corporativo", descricao: "Empresas e instituições: até 5 representantes e visibilidade de marca", valor: 1500000, periodo: "anual" }] },
+        { chave: "site", valor: { missao: "Ligar, inspirar e potenciar líderes de todo o mundo para criarem impacto, negócios e oportunidades.", visao: "Ser a maior rede lusófona de líderes com alcance global.", valores: "Excelência · Integridade · Visão global · Colaboração · Impacto", morada: "Luanda, Angola" } },
+        { chave: "pagamento", valor: {} }],
+      noticias: [{ id: "n1", slug: "nasce-o-club-global-de-lideres", titulo: "Nasce o Club Global de Líderes", resumo: "Uma rede de líderes, executivos e empreendedores para criar ligações, negócios e impacto à escala global.", corpo: "O Club Global de Líderes lança a sua plataforma.\n\nOs membros terão acesso a eventos exclusivos, encontros de networking, oportunidades de negócio publicadas por outros líderes, benefícios de parceiros e um cartão de membro digital verificável.\n\nAs candidaturas abrem em breve.", categoria: "Comunicado", imagem: "", publicado: true, destaque: true, publicado_em: "2026-11-25T12:00:00Z" }]
+    };
+    var fetchReal = window.fetch.bind(window);
+    window.fetch = function (url, op) {
+      var u = String(url && url.url || url);
+      if (u.indexOf("https://demo.invalid") !== 0) return fetchReal(url, op);
+      var metodo = ((op && op.method) || "GET").toUpperCase(), cab = { "content-type": "application/json" };
+      if (u.indexOf("/rest/v1/") < 0 || metodo !== "GET" && metodo !== "HEAD") return Promise.resolve(new Response(JSON.stringify({ message: "A plataforma está a ser preparada. As candidaturas, inscrições e contas abrem em breve.", error_description: "A plataforma está a ser preparada. As candidaturas, inscrições e contas abrem em breve." }), { status: 400, headers: cab }));
+      var p = new URL(u), t = p.pathname.split("/").pop(), d = DEMO_DADOS[t] || [];
+      var slugQ = p.searchParams.get("slug"); if (slugQ) d = d.filter(function (x) { return "eq." + x.slug === slugQ; });
+      var um = ((op && op.headers && (op.headers.Accept || op.headers.accept)) || "").indexOf("vnd.pgrst.object") >= 0;
+      cab["content-range"] = "0-" + Math.max(0, d.length - 1) + "/" + d.length;
+      return Promise.resolve(new Response(metodo === "HEAD" ? null : JSON.stringify(um ? (d[0] || null) : d), { status: 200, headers: cab }));
+    };
+  }
   var sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   var main = document.getElementById("main"), modal = document.getElementById("modal"), mBody = document.getElementById("mBody");
   var S = { user: null, perfil: null, membro: null, defs: { planos: [], pagamento: {}, site: {} } };
