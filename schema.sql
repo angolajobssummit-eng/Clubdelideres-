@@ -3,6 +3,11 @@
 -- Base de dados Supabase. Correr no SQL Editor (projecto vazio).
 -- =====================================================================
 
+-- Instalação partilhada: todas as tabelas do clube ficam no schema "cgl".
+create schema if not exists cgl;
+grant usage on schema cgl to anon, authenticated, service_role;
+set search_path = cgl, public;
+
 -- ---------- Perfis (uma linha por conta) ----------
 create table if not exists perfis (
   id uuid primary key references auth.users on delete cascade,
@@ -13,22 +18,22 @@ create table if not exists perfis (
 );
 
 create or replace function is_admin() returns boolean
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = cgl as $$
   select exists (select 1 from perfis where id = auth.uid() and papel = 'admin');
 $$;
 
 create or replace function handle_new_user() returns trigger
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 begin
   insert into perfis (id, nome, telefone)
   values (new.id, coalesce(new.raw_user_meta_data->>'nome', ''), coalesce(new.raw_user_meta_data->>'telefone', ''))
   on conflict (id) do nothing;
   return new;
 end $$;
-drop trigger if exists on_auth_user_created on auth.users;
-create trigger on_auth_user_created after insert on auth.users for each row execute function handle_new_user();
+drop trigger if exists on_auth_user_created_cgl on auth.users;
+create trigger on_auth_user_created_cgl after insert on auth.users for each row execute function cgl.handle_new_user();
 
-create or replace function guard_perfis() returns trigger language plpgsql security definer set search_path = public as $$
+create or replace function guard_perfis() returns trigger language plpgsql security definer set search_path = cgl as $$
 begin
   if auth.uid() is not null and not is_admin() then new.papel := old.papel; end if;
   return new;
@@ -62,7 +67,7 @@ create table if not exists membros (
   criado_em timestamptz not null default now()
 );
 
-create or replace function guard_membros() returns trigger language plpgsql security definer set search_path = public as $$
+create or replace function guard_membros() returns trigger language plpgsql security definer set search_path = cgl as $$
 begin
   if auth.uid() is not null and not is_admin() then
     if tg_op = 'INSERT' then
@@ -216,7 +221,6 @@ create table if not exists eventos (
   cidade text not null default '',
   pais text not null default '',
   online boolean not null default false,
-  link_online text not null default '',
   inicio timestamptz not null,
   fim timestamptz,
   imagem text not null default '',
@@ -229,6 +233,15 @@ create table if not exists eventos (
   criado_em timestamptz not null default now()
 );
 create index if not exists eventos_inicio_idx on eventos (inicio);
+-- link das sessões online: só a administração e os inscritos confirmados
+create table if not exists eventos_privado (
+  evento_id uuid primary key references eventos on delete cascade,
+  link_online text not null default ''
+);
+alter table eventos_privado enable row level security;
+create policy eventos_privado_admin on eventos_privado for all using (is_admin()) with check (is_admin());
+revoke all on eventos_privado from anon, authenticated;
+grant select, insert, update, delete on eventos_privado to authenticated;
 
 create table if not exists inscricoes (
   id uuid primary key default gen_random_uuid(),
@@ -267,7 +280,7 @@ create table if not exists oportunidades (
 );
 create index if not exists oportunidades_perfil_idx on oportunidades (perfil_id);
 
-create or replace function guard_oportunidades() returns trigger language plpgsql security definer set search_path = public as $$
+create or replace function guard_oportunidades() returns trigger language plpgsql security definer set search_path = cgl as $$
 begin
   if auth.uid() is not null and not is_admin() then
     if tg_op = 'INSERT' then new.perfil_id := auth.uid(); new.estado := 'pendente'; new.nota_admin := '';
@@ -311,7 +324,7 @@ grant select on v_eventos, v_oportunidades to anon, authenticated;
 -- ---------- Funções ----------
 -- Membro pede o pagamento da quota do seu plano (gera referência)
 create or replace function pedir_quota() returns quotas
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 declare v_m membros; v_plano jsonb; v_q quotas;
 begin
   select * into v_m from membros where perfil_id = auth.uid();
@@ -331,7 +344,7 @@ end $$;
 
 -- Membro anexa o comprovativo (caminho do ficheiro no Storage)
 create or replace function anexar_comprovativo(p_quota uuid, p_caminho text) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 begin
   update quotas q set comprovativo = p_caminho
   where q.id = p_quota and q.estado = 'pendente'
@@ -342,7 +355,7 @@ end $$;
 
 -- Admin confirma o pagamento: quota paga e validade prolongada
 create or replace function confirmar_quota(p_quota uuid, p_metodo text, p_valor int) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 declare v_q quotas;
 begin
   if not is_admin() then raise exception 'Sem permissão.'; end if;
@@ -355,7 +368,7 @@ end $$;
 
 -- Benefícios com código: só para membros activos com quota em dia
 create or replace function meus_beneficios() returns setof beneficios
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = cgl as $$
   select b.* from beneficios b
   where b.activo and exists (select 1 from membros m where m.perfil_id = auth.uid() and m.estado = 'activo' and m.quota_ate >= current_date)
   order by b.ordem, b.criado_em;
@@ -363,7 +376,7 @@ $$;
 
 -- Verificação pública do cartão de membro (parceiros validam benefícios)
 create or replace function verificar_membro(p_numero text) returns json
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = cgl as $$
   select coalesce((select json_build_object('ok', true, 'numero', numero, 'nome', nome, 'tipo', tipo, 'estado', estado,
       'quota_ate', quota_ate, 'em_dia', (estado = 'activo' and quota_ate >= current_date))
     from membros where upper(numero) = upper(trim(p_numero))), json_build_object('ok', false));
@@ -371,7 +384,7 @@ $$;
 
 -- Painel da administração
 create or replace function admin_resumo() returns json
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 begin
   if not is_admin() then raise exception 'Sem permissão.'; end if;
   return json_build_object(
@@ -400,7 +413,7 @@ end $$;
 create or replace function admin_membros() returns table (id uuid, perfil_id uuid, numero text, nome text, email text, telefone text, tipo text, plano text, area text,
   pais text, cargo text, organizacao text, linkedin text, documento text, bio text, plataformas jsonb, publico boolean, estado text, nota_admin text, quota_ate date, aprovado_em timestamptz, criado_em timestamptz,
   papel text, quota_pendente uuid, comprovativo text)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 begin
   if not is_admin() then raise exception 'Sem permissão.'; end if;
   return query select m.id, m.perfil_id, m.numero, m.nome, u.email::text, m.telefone, m.tipo, m.plano, m.area, m.pais, m.cargo, m.organizacao, m.linkedin, m.documento, m.bio, m.plataformas,
@@ -413,7 +426,7 @@ end $$;
 
 create or replace function admin_quotas() returns table (id uuid, membro_id uuid, membro text, numero text, email text, referencia text, plano text, descricao text,
   valor int, meses int, estado text, metodo text, comprovativo text, pago_em timestamptz, criado_em timestamptz)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 begin
   if not is_admin() then raise exception 'Sem permissão.'; end if;
   return query select q.id, q.membro_id, m.nome, m.numero, u.email::text, q.referencia, q.plano, q.descricao, q.valor, q.meses, q.estado, q.metodo, q.comprovativo, q.pago_em, q.criado_em
@@ -422,7 +435,7 @@ begin
 end $$;
 
 create or replace function admin_definir_papel(p_email text, p_papel text) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 declare v_id uuid;
 begin
   if not is_admin() then raise exception 'Sem permissão.'; end if;
@@ -434,7 +447,7 @@ begin
 end $$;
 
 create or replace function admin_lista_admins() returns table (email text, nome text)
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 begin
   if not is_admin() then raise exception 'Sem permissão.'; end if;
   return query select u.email::text, p.nome from perfis p join auth.users u on u.id = p.id where p.papel = 'admin' order by p.nome;
@@ -449,7 +462,7 @@ grant execute on function verificar_membro(text) to anon, authenticated;
 
 -- Inscrição num evento: preço de membro para quem tem a anuidade em dia
 create or replace function inscrever_evento(p_evento uuid, p_nome text, p_telefone text, p_organizacao text) returns inscricoes
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 declare v_e eventos; v_m membros; v_dia boolean; v_i inscricoes; v_n int;
 begin
   if auth.uid() is null then raise exception 'Entre na sua conta para se inscrever.'; end if;
@@ -461,7 +474,7 @@ begin
     if v_i.estado <> 'cancelada' then return v_i; end if;
   end if;
   select * into v_m from membros where perfil_id = auth.uid();
-  v_dia := found and v_m.estado = 'activo' and v_m.quota_ate >= current_date;
+  v_dia := coalesce(found and v_m.estado = 'activo' and v_m.quota_ate >= current_date, false);
   if v_e.so_membros and not v_dia then raise exception 'Evento exclusivo para membros com a anuidade em dia.'; end if;
   select count(*) into v_n from inscricoes where evento_id = p_evento and estado <> 'cancelada';
   if v_e.lotacao > 0 and v_n >= v_e.lotacao then raise exception 'Lotação esgotada.'; end if;
@@ -477,8 +490,14 @@ begin
   return v_i;
 end $$;
 
+create or replace function link_evento(p_evento uuid) returns text
+language sql stable security definer set search_path = cgl as $$
+  select p.link_online from eventos_privado p
+  where p.evento_id = p_evento and (is_admin() or exists (select 1 from inscricoes i where i.evento_id = p_evento and i.perfil_id = auth.uid() and i.estado = 'confirmada'));
+$$;
+
 create or replace function cancelar_inscricao(p_id uuid) returns void
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 begin
   update inscricoes set estado = 'cancelada' where id = p_id and perfil_id = auth.uid() and estado = 'pendente';
   if not found then raise exception 'Só é possível cancelar inscrições por pagar. Contacte o clube.'; end if;
@@ -486,7 +505,7 @@ end $$;
 
 -- Validação do bilhete à entrada (administração)
 create or replace function validar_bilhete(p_codigo text) returns json
-language plpgsql security definer set search_path = public as $$
+language plpgsql security definer set search_path = cgl as $$
 declare v_i inscricoes; v_t text;
 begin
   if not is_admin() then raise exception 'Sem permissão.'; end if;
@@ -501,7 +520,7 @@ end $$;
 
 -- Contacto de uma oportunidade: só para membros activos
 create or replace function contacto_oportunidade(p_id uuid) returns json
-language plpgsql stable security definer set search_path = public as $$
+language plpgsql stable security definer set search_path = cgl as $$
 declare v_o oportunidades; v_u text;
 begin
   if not exists (select 1 from membros where perfil_id = auth.uid() and estado = 'activo') and not is_admin() then
@@ -513,20 +532,20 @@ begin
 end $$;
 
 revoke execute on function guard_oportunidades() from public, anon, authenticated;
-revoke execute on function inscrever_evento(uuid, text, text, text), cancelar_inscricao(uuid), validar_bilhete(text), contacto_oportunidade(uuid) from public, anon;
-grant execute on function inscrever_evento(uuid, text, text, text), cancelar_inscricao(uuid), validar_bilhete(text), contacto_oportunidade(uuid) to authenticated;
+revoke execute on function link_evento(uuid), inscrever_evento(uuid, text, text, text), cancelar_inscricao(uuid), validar_bilhete(text), contacto_oportunidade(uuid) from public, anon;
+grant execute on function link_evento(uuid), inscrever_evento(uuid, text, text, text), cancelar_inscricao(uuid), validar_bilhete(text), contacto_oportunidade(uuid) to authenticated;
 
 -- ---------- Ficheiros (Storage) ----------
-insert into storage.buckets (id, name, public) values ('publico', 'publico', true) on conflict (id) do nothing;
-insert into storage.buckets (id, name, public, file_size_limit) values ('comprovativos', 'comprovativos', false, 5242880) on conflict (id) do nothing;
-create policy publico_ler on storage.objects for select using (bucket_id = 'publico');
-create policy publico_admin on storage.objects for insert to authenticated with check (bucket_id = 'publico' and is_admin());
-create policy publico_admin_upd on storage.objects for update to authenticated using (bucket_id = 'publico' and is_admin());
-create policy publico_admin_del on storage.objects for delete to authenticated using (bucket_id = 'publico' and is_admin());
-create policy comprov_enviar on storage.objects for insert to authenticated with check (
-  bucket_id = 'comprovativos' and (storage.foldername(name))[1] = (select m.id::text from membros m where m.perfil_id = (select auth.uid())));
-create policy comprov_ler on storage.objects for select to authenticated using (
-  bucket_id = 'comprovativos' and (is_admin() or (storage.foldername(name))[1] = (select m.id::text from membros m where m.perfil_id = (select auth.uid()))));
+insert into storage.buckets (id, name, public) values ('cgl-publico', 'cgl-publico', true) on conflict (id) do nothing;
+insert into storage.buckets (id, name, public, file_size_limit) values ('cgl-comprovativos', 'cgl-comprovativos', false, 5242880) on conflict (id) do nothing;
+create policy cgl_publico_ler on storage.objects for select using (bucket_id = 'cgl-publico');
+create policy cgl_publico_admin on storage.objects for insert to authenticated with check (bucket_id = 'cgl-publico' and is_admin());
+create policy cgl_publico_admin_upd on storage.objects for update to authenticated using (bucket_id = 'cgl-publico' and is_admin());
+create policy cgl_publico_admin_del on storage.objects for delete to authenticated using (bucket_id = 'cgl-publico' and is_admin());
+create policy cgl_comprov_enviar on storage.objects for insert to authenticated with check (
+  bucket_id = 'cgl-comprovativos' and (storage.foldername(name))[1] = (select m.id::text from membros m where m.perfil_id = (select auth.uid())));
+create policy cgl_comprov_ler on storage.objects for select to authenticated using (
+  bucket_id = 'cgl-comprovativos' and (is_admin() or (storage.foldername(name))[1] = (select m.id::text from membros m where m.perfil_id = (select auth.uid()))));
 
 -- ---------- Conteúdo inicial ----------
 insert into definicoes (chave, valor) values
@@ -551,3 +570,11 @@ on conflict (slug) do nothing;
 
 -- Tornar-se administrador (depois de criar a conta no site):
 --   update perfis set papel = 'admin' where id = (select id from auth.users where email = 'o-seu-email@exemplo.com');
+
+grant all on all tables in schema cgl to service_role;
+grant all on all sequences in schema cgl to service_role;
+grant usage, select on all sequences in schema cgl to authenticated;
+-- contas que já existiam (partilha de autenticação com outro site)
+insert into cgl.perfis (id, nome, telefone)
+select id, coalesce(raw_user_meta_data->>'nome', ''), coalesce(raw_user_meta_data->>'telefone', '') from auth.users
+on conflict (id) do nothing;

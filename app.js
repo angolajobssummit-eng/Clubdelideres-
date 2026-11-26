@@ -1,32 +1,9 @@
 /* Club Global de Líderes — plataforma do clube (público, área do membro, administração). */
 (function () {
   "use strict";
-  var SB_URL = "https://CGL-PROJECTO.supabase.co"; /* substituir pelo projecto Supabase */
-  var SB_KEY = "CGL-CHAVE-PUBLICA";
-  /* Enquanto a base de dados não está ligada, o site funciona em modo de apresentação. */
-  var DEMO = SB_URL.indexOf("CGL-PROJECTO") >= 0;
-  if (DEMO) {
-    SB_URL = "https://demo.invalid";
-    var DEMO_DADOS = {
-      definicoes: [{ chave: "planos", valor: [{ id: "jovem", nome: "Jovem Líder", descricao: "Até 35 anos: estudantes, jovens profissionais e empreendedores", valor: 25000, periodo: "anual" }, { id: "executivo", nome: "Membro Executivo", descricao: "Executivos, empresários e líderes de organizações", valor: 120000, periodo: "anual" }, { id: "platinum", nome: "Membro Platinum", descricao: "Acesso prioritário a todos os eventos, mesas de CEOs e delegações internacionais", valor: 450000, periodo: "anual" }, { id: "corporativo", nome: "Corporativo", descricao: "Empresas e instituições: até 5 representantes e visibilidade de marca", valor: 1500000, periodo: "anual" }] },
-        { chave: "site", valor: { missao: "Ligar, inspirar e potenciar líderes de todo o mundo para criarem impacto, negócios e oportunidades.", visao: "Ser a maior rede lusófona de líderes com alcance global.", valores: "Excelência · Integridade · Visão global · Colaboração · Impacto", morada: "Luanda, Angola" } },
-        { chave: "pagamento", valor: {} }],
-      noticias: [{ id: "n1", slug: "nasce-o-club-global-de-lideres", titulo: "Nasce o Club Global de Líderes", resumo: "Uma rede de líderes, executivos e empreendedores para criar ligações, negócios e impacto à escala global.", corpo: "O Club Global de Líderes lança a sua plataforma.\n\nOs membros terão acesso a eventos exclusivos, encontros de networking, oportunidades de negócio publicadas por outros líderes, benefícios de parceiros e um cartão de membro digital verificável.\n\nAs candidaturas abrem em breve.", categoria: "Comunicado", imagem: "", publicado: true, destaque: true, publicado_em: "2026-11-25T12:00:00Z" }]
-    };
-    var fetchReal = window.fetch.bind(window);
-    window.fetch = function (url, op) {
-      var u = String(url && url.url || url);
-      if (u.indexOf("https://demo.invalid") !== 0) return fetchReal(url, op);
-      var metodo = ((op && op.method) || "GET").toUpperCase(), cab = { "content-type": "application/json" };
-      if (u.indexOf("/rest/v1/") < 0 || metodo !== "GET" && metodo !== "HEAD") return Promise.resolve(new Response(JSON.stringify({ message: "A plataforma está a ser preparada. As candidaturas, inscrições e contas abrem em breve.", error_description: "A plataforma está a ser preparada. As candidaturas, inscrições e contas abrem em breve." }), { status: 400, headers: cab }));
-      var p = new URL(u), t = p.pathname.split("/").pop(), d = DEMO_DADOS[t] || [];
-      var slugQ = p.searchParams.get("slug"); if (slugQ) d = d.filter(function (x) { return "eq." + x.slug === slugQ; });
-      var um = ((op && op.headers && (op.headers.Accept || op.headers.accept)) || "").indexOf("vnd.pgrst.object") >= 0;
-      cab["content-range"] = "0-" + Math.max(0, d.length - 1) + "/" + d.length;
-      return Promise.resolve(new Response(metodo === "HEAD" ? null : JSON.stringify(um ? (d[0] || null) : d), { status: 200, headers: cab }));
-    };
-  }
-  var sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  var SB_URL = "https://wabzbkcgrrrseeaebsmh.supabase.co"; /* base de dados partilhada: tabelas no schema "cgl" */
+  var SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndhYnpia2NncnJyc2VlYWVic21oIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTU1NTQyMTcsImV4cCI6MjExMTEzMDIxN30.5Aj_OwB8889LfkaV6pt1wxJRhnWK38V_XBLpoGli5WQ";
+  var sb = window.supabase.createClient(SB_URL, SB_KEY, { db: { schema: "cgl" }, auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storageKey: "cgl-auth" } });
   var main = document.getElementById("main"), modal = document.getElementById("modal"), mBody = document.getElementById("mBody");
   var S = { user: null, perfil: null, membro: null, defs: { planos: [], pagamento: {}, site: {} } };
   var C = {}, PEND = {};
@@ -63,7 +40,7 @@
   function isAdmin() { return !!(S.perfil && S.perfil.papel === "admin"); }
   function emDia(m) { return !!(m && m.estado === "activo" && m.quota_ate && new Date(m.quota_ate + "T23:59:59") >= new Date()); }
   function plano(id) { return S.defs.planos.filter(function (p) { return p.id === id; })[0] || null; }
-  function pubUrl(path) { if (!path) return ""; if (/^(https?:|img\/)/.test(path)) return path; return sb.storage.from("publico").getPublicUrl(path).data.publicUrl; }
+  function pubUrl(path) { if (!path) return ""; if (/^(https?:|img\/)/.test(path)) return path; return sb.storage.from("cgl-publico").getPublicUrl(path).data.publicUrl; }
   function wa(num, msg) { return "https://wa.me/" + String(num || "").replace(/\D/g, "") + (msg ? "?text=" + encodeURIComponent(msg) : ""); }
   function csv(linhas, nome) {
     var t = linhas.map(function (l) { return l.map(function (c) { c = String(c == null ? "" : c); return /[",;\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(";"); }).join("\r\n");
@@ -302,7 +279,7 @@
   function acao2(fn, msg, prefs) { return acao(fn, msg, prefs).catch(function () {}); }
   function blocoBilhete(i, E) {
     var P = S.defs.pagamento || {}, msg = "Inscrição CGL\nEvento: " + (E ? E.titulo : "") + "\nNome: " + i.nome + "\nCódigo: " + i.codigo + "\nValor: " + kz(i.valor);
-    if (i.estado === "confirmada") return '<div class="bilhete"><div class="bilhete__t"><span class="small">Bilhete confirmado</span><b>' + esc(i.nome) + "</b><span>" + esc(i.codigo) + '</span></div><div class="qr" data-qr="' + esc(i.codigo) + '"></div></div><p class="small">Apresente este QR à entrada.' + (E && E.online ? " O link da sessão online é enviado aos inscritos." : "") + "</p>";
+    if (i.estado === "confirmada") return '<div class="bilhete"><div class="bilhete__t"><span class="small">Bilhete confirmado</span><b>' + esc(i.nome) + "</b><span>" + esc(i.codigo) + '</span></div><div class="qr" data-qr="' + esc(i.codigo) + '"></div></div><p class="small">Apresente este QR à entrada.</p>' + (E && E.online ? '<button class="btn btn--sm" type="button" data-act="ev-link" data-id="' + esc(i.evento_id) + '">Abrir link da sessão online</button>' : "");
     return '<div class="status status--warn"><div><b>Inscrição registada · pagamento pendente</b>Código ' + esc(i.codigo) + " · " + esc(kz(i.valor)) + "</div></div>" +
       (P.mcx ? "<p class=\"small\"><b>Multicaixa Express:</b> " + esc(P.mcx) + (P.titular ? " (" + esc(P.titular) + ")" : "") + "</p>" : "") + (P.iban ? "<p class=\"small\"><b>Transferência:</b> IBAN " + esc(P.iban) + (P.banco ? " · " + esc(P.banco) : "") + "</p>" : "") +
       '<p class="small">Use o código <b>' + esc(i.codigo) + "</b> como descritivo. O bilhete com QR aparece aqui quando o clube confirmar o pagamento.</p>" +
@@ -451,7 +428,7 @@
       e.preventDefault(); var file = fc.querySelector("input[type=file]").files[0]; if (!file) return;
       if (file.size > 5 * 1024 * 1024) { toast("O ficheiro tem mais de 5 MB.", true); return; }
       var ext = (file.name.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, ""), caminho = m.id + "/" + fc.dataset.id + "-" + Date.now() + "." + ext;
-      acao(async function () { ok(await sb.storage.from("comprovativos").upload(caminho, file, { upsert: false, contentType: file.type || undefined })); ok(await sb.rpc("anexar_comprovativo", { p_quota: fc.dataset.id, p_caminho: caminho })); }, "Comprovativo enviado. O clube vai confirmar o pagamento.", ["conta:quotas"]).catch(function () {});
+      acao(async function () { ok(await sb.storage.from("cgl-comprovativos").upload(caminho, file, { upsert: false, contentType: file.type || undefined })); ok(await sb.rpc("anexar_comprovativo", { p_quota: fc.dataset.id, p_caminho: caminho })); }, "Comprovativo enviado. O clube vai confirmar o pagamento.", ["conta:quotas"]).catch(function () {});
     });
   }
   function blocoPagar(qt) {
@@ -572,19 +549,21 @@
       '<div class="two"><label>Tipo<select name="tipo">' + EV_TIPOS.map(function (t) { return "<option" + (e.tipo === t ? " selected" : "") + ">" + esc(t) + "</option>"; }).join("") + '</select></label><label>Imagem de capa<input name="img" type="file" accept="image/*"></label></div>' +
       '<div class="two"><label>Início<input name="inicio" type="datetime-local" required value="' + esc(dtLocal(e.inicio)) + '"></label><label>Fim<input name="fim" type="datetime-local" value="' + esc(dtLocal(e.fim)) + '"></label></div>' +
       '<div class="three"><label>Local<input name="local" maxlength="160" value="' + esc(e.local || "") + '" placeholder="Hotel, auditório…"></label><label>Cidade<input name="cidade" maxlength="80" value="' + esc(e.cidade || "") + '"></label><label>País<select name="pais">' + PAISES.map(function (t) { return "<option" + (e.pais === t ? " selected" : "") + ">" + esc(t) + "</option>"; }).join("") + "</select></label></div>" +
-      '<label class="check"><input type="checkbox" name="online"' + (e.online ? " checked" : "") + '> Evento online</label><label>Link da sessão online <span class="hint">Não é público: envie-o aos inscritos confirmados.</span><input name="link_online" maxlength="300" value="' + esc(e.link_online || "") + '"></label>' +
+      '<label class="check"><input type="checkbox" name="online"' + (e.online ? " checked" : "") + '> Evento online</label><label>Link da sessão online <span class="hint">Não é público: só os inscritos com bilhete confirmado o vêem.</span><input name="link_online" id="evLink" maxlength="300" value=""></label>' +
       '<label>Resumo<input name="resumo" maxlength="300" value="' + esc(e.resumo || "") + '"></label><label>Programa e descrição<textarea name="descricao" style="min-height:140px">' + esc(e.descricao || "") + "</textarea></label>" +
       '<div class="three"><label>Preço membros (Kz)<input name="preco_membro" type="number" min="0" step="500" value="' + (e.preco_membro || 0) + '"></label><label>Preço público (Kz)<input name="preco_publico" type="number" min="0" step="500" value="' + (e.preco_publico || 0) + '"></label><label>Lotação (0 = sem limite)<input name="lotacao" type="number" min="0" value="' + (e.lotacao || 0) + '"></label></div>' +
       '<label class="check"><input type="checkbox" name="so_membros"' + (e.so_membros ? " checked" : "") + '> Exclusivo para membros com anuidade em dia</label><label class="check"><input type="checkbox" name="publicado"' + (e.publicado ? " checked" : "") + '> Publicado (visível no site)</label><label class="check"><input type="checkbox" name="destaque"' + (e.destaque ? " checked" : "") + '> Destaque na página inicial</label>' +
       '<div class="btns"><button class="btn" type="submit">Guardar</button>' + (id ? '<a class="btn btn--line" href="#/eventos/' + esc(e.slug) + '" target="_blank">Ver página</a><button class="btn btn--line" type="button" data-act="ev-apagar" data-id="' + id + '">Apagar</button>' : "") + "</div></form>");
+    if (id) sb.from("eventos_privado").select("link_online").eq("evento_id", id).maybeSingle().then(function (r) { var el = document.getElementById("evLink"); if (el && r.data) el.value = r.data.link_online; });
     document.getElementById("fEd").addEventListener("submit", function (ev) { ev.preventDefault(); var d = new FormData(this), o = {};
-      ["titulo", "tipo", "local", "cidade", "pais", "link_online", "resumo", "descricao"].forEach(function (k) { o[k] = String(d.get(k) || "").trim(); });
+      ["titulo", "tipo", "local", "cidade", "pais", "resumo", "descricao"].forEach(function (k) { o[k] = String(d.get(k) || "").trim(); });
       ["preco_membro", "preco_publico", "lotacao"].forEach(function (k) { o[k] = Math.max(0, Number(d.get(k)) || 0); });
       ["online", "so_membros", "publicado", "destaque"].forEach(function (k) { o[k] = !!d.get(k); });
       o.inicio = new Date(d.get("inicio")).toISOString(); o.fim = d.get("fim") ? new Date(d.get("fim")).toISOString() : null;
       if (o.fim && o.fim < o.inicio) { toast("O fim tem de ser depois do início.", true); return; }
       acao2(async function () { var img = await upload(d.get("img"), "eventos"); if (img) o.imagem = img;
-        if (id) ok(await sb.from("eventos").update(o).eq("id", id)); else { o.slug = slug(o.titulo) + "-" + o.inicio.slice(0, 10); ok(await sb.from("eventos").insert(o)); }
+        var evId = id; if (id) ok(await sb.from("eventos").update(o).eq("id", id)); else { o.slug = slug(o.titulo) + "-" + o.inicio.slice(0, 10); evId = ok(await sb.from("eventos").insert(o).select("id").single()).id; }
+        ok(await sb.from("eventos_privado").upsert({ evento_id: evId, link_online: String(d.get("link_online") || "").trim() }));
         fechar(); }, "Evento guardado", ["adm:", "pub:"]); });
   }
   function admOportunidades(q) {
@@ -661,7 +640,7 @@
     if (!file || !file.size) return null;
     if (file.size > 5 * 1024 * 1024) throw new Error("A imagem tem mais de 5 MB.");
     var ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, ""), caminho = pasta + "/" + Date.now() + "-" + Math.random().toString(36).slice(2, 7) + "." + ext;
-    ok(await sb.storage.from("publico").upload(caminho, file, { contentType: file.type || undefined }));
+    ok(await sb.storage.from("cgl-publico").upload(caminho, file, { contentType: file.type || undefined }));
     return caminho;
   }
   function editarNoticia(id) {
@@ -730,7 +709,7 @@
       if (!confirm("Registar um pagamento de " + kz(pp.valor) + " (" + pp.nome + ") para " + mm.nome + "? Poderá ajustar o valor no passo seguinte.")) return;
       acao(async function () { var ins = ok(await sb.from("quotas").insert({ membro_id: id, referencia: "M-" + Date.now().toString(36).toUpperCase(), plano: pp.nome, descricao: "Quota " + pp.nome + " (registo manual)", valor: pp.valor || 0, meses: pp.periodo === "mensal" ? 1 : 12 }).select().single()); fechar(); setTimeout(function () { var b = document.createElement("button"); b.dataset.act = "q-confirmar"; b.dataset.id = ins.id; b.dataset.nome = mm.nome; b.dataset.valor = pp.valor || 0; document.body.appendChild(b); b.click(); b.remove(); }, 200); }, null, ["adm:"]).catch(function () {}); return; }
     if (a === "q-anular") { if (!confirm("Anular esta quota?")) return; acao(async function () { ok(await sb.from("quotas").update({ estado: "anulado" }).eq("id", id)); }, "Quota anulada", ["adm:"]).catch(function () {}); return; }
-    if (a === "ver-comp") { try { var u = ok(await sb.storage.from("comprovativos").createSignedUrl(t.dataset.path, 600)); window.open(u.signedUrl, "_blank", "noopener"); } catch (e) { toast(traduz(e).message, true); } return; }
+    if (a === "ver-comp") { try { var u = ok(await sb.storage.from("cgl-comprovativos").createSignedUrl(t.dataset.path, 600)); window.open(u.signedUrl, "_blank", "noopener"); } catch (e) { toast(traduz(e).message, true); } return; }
     if (a === "ev-editar") return editarEvento(id);
     if (a === "ev-apagar") { if (!confirm("Apagar este evento e todas as inscrições?")) return; fechar(); acao2(async function () { ok(await sb.from("eventos").delete().eq("id", id)); }, "Evento apagado", ["adm:", "pub:"]); return; }
     if (a === "insc-confirmar") { abrir('<h2 id="mTitle">Confirmar pagamento</h2><p class="small">' + esc(t.dataset.nome || "") + '</p><form class="form" id="fConfI"><label>Método<select name="metodo"><option>Multicaixa Express</option><option>Transferência bancária</option><option>Numerário</option><option>Cortesia / convite</option><option>Outro</option></select></label><label>Valor recebido (Kz)<input name="valor" type="number" min="0" step="500" required value="' + esc(t.dataset.valor || "") + '"></label><button class="btn btn--ok btn--block" type="submit">Confirmar e emitir bilhete</button></form>');
@@ -740,6 +719,7 @@
     if (a === "insc-cancelar") { if (!confirm("Cancelar a sua inscrição?")) return; acao2(async function () { ok(await sb.rpc("cancelar_inscricao", { p_id: id })); }, "Inscrição cancelada", ["conta:", "pub:ev"]); return; }
     if (a === "csv-insc") { var IL = C["adm:insc:" + id] || []; csv([["Nome", "Organização", "Email", "Telefone", "Membro", "Código", "Valor (Kz)", "Estado", "Método", "Presença", "Inscrito em"]].concat(IL.map(function (i) { return [i.nome, i.organizacao, i.email, i.telefone, i.membro ? "sim" : "não", i.codigo, i.valor, i.estado, i.metodo, i.presenca ? "sim" : "não", curta(i.criado_em)]; })), "inscricoes-cgl.csv"); return; }
     if (a === "ent-camara") return lerCamara();
+    if (a === "ev-link") { try { var lk = ok(await sb.rpc("link_evento", { p_evento: id })); if (lk && /^https?:\/\//i.test(lk)) window.open(lk, "_blank", "noopener"); else toast("O link da sessão ainda não foi publicado pelo clube.", true); } catch (e) { toast(traduz(e).message, true); } return; }
     if (a === "op-nova") { if (!membroAtivo()) { toast("Disponível para membros activos.", true); return; } return editarOport(null); }
     if (a === "op-editar") return editarOport((C["conta:op"] || []).filter(function (o) { return o.id === id; })[0]);
     if (a === "op-encerrar") { if (!confirm("Encerrar esta oportunidade? Deixa de aparecer no site.")) return; acao2(async function () { ok(await sb.from("oportunidades").update({ estado: "encerrada" }).eq("id", id)); }, "Oportunidade encerrada", ["conta:op", "pub:op"]); return; }
