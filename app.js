@@ -386,7 +386,7 @@
           await carregarConta(); desenharTopo(); toast("Pedido de adesão enviado."); location.hash = "#/conta";
         } else {
           ad.telefone = String(d.get("telefone") || "").trim();
-          var r = await sb.auth.signUp({ email: String(d.get("email")).trim(), password: d.get("pw"), options: { data: { nome: ad.nome, telefone: ad.telefone, adesao: ad }, emailRedirectTo: location.origin + location.pathname + "#/conta" } });
+          var r = await sb.auth.signUp({ email: String(d.get("email")).trim(), password: d.get("pw"), options: { data: { nome: ad.nome, telefone: ad.telefone, adesao: ad, origem: "cgl" }, emailRedirectTo: location.origin + location.pathname + "#/conta" } });
           var dd = ok(r);
           if (dd.session) { await carregarConta(); desenharTopo(); location.hash = "#/conta"; }
           else out.innerHTML = '<div class="msg msg--ok"><b>Quase lá!</b> Enviámos um email para <b>' + esc(d.get("email")) + "</b>. Abra o link para confirmar a conta. O pedido de adesão fica registado no primeiro acesso.</div>";
