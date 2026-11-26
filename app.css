@@ -452,3 +452,10 @@ body.busy { cursor: progress; }
 .fundador p { margin: 0; }
 .fundador__org { color: #e2c475; font-weight: 700; margin-top: 6px !important; }
 @media (max-width: 560px) { .fundador { grid-template-columns: 1fr; text-align: center; justify-items: center; } }
+@media (max-width: 560px) {
+  .team { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .member figcaption { padding: 10px 10px 12px; }
+  .member b { font-size: .9rem; }
+  .member span { font-size: .78rem; line-height: 1.35; display: block; }
+  .member__ini { font-size: 1.9rem; }
+}
