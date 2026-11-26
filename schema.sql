@@ -336,7 +336,7 @@ begin
   if v_plano is null then raise exception 'Plano de quota não encontrado. Contacte o clube.'; end if;
   insert into quotas (membro_id, referencia, plano, descricao, valor, meses)
   values (v_m.id, 'A-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6)), v_plano->>'nome',
-          'Anuidade ' || (v_plano->>'nome') || ' · ' || coalesce(v_plano->>'periodo', 'anual'),
+          'Mensalidade ' || (v_plano->>'nome') || ' · ' || coalesce(v_plano->>'periodo', 'anual'),
           coalesce((v_plano->>'valor')::int, 0), case when v_plano->>'periodo' = 'mensal' then 1 else 12 end)
   returning * into v_q;
   return v_q;
@@ -578,3 +578,75 @@ grant usage, select on all sequences in schema cgl to authenticated;
 insert into cgl.perfis (id, nome, telefone)
 select id, coalesce(raw_user_meta_data->>'nome', ''), coalesce(raw_user_meta_data->>'telefone', '') from auth.users
 on conflict (id) do nothing;
+
+-- =====================================================================
+-- Actualização: mensalidades, limite de 100 membros (2 anos) e órgãos sociais
+-- =====================================================================
+set search_path = cgl, public;
+update definicoes set valor = '[
+  {"id":"jovem","nome":"Jovem Líder","descricao":"Até 35 anos: jovens profissionais, empreendedores e líderes emergentes","valor":100000,"periodo":"mensal"},
+  {"id":"executivo","nome":"Membro Executivo","descricao":"Executivos, empresários e líderes de organizações","valor":250000,"periodo":"mensal"},
+  {"id":"platinum","nome":"Membro Platinum","descricao":"Acesso prioritário a todos os eventos, mesas de CEOs e delegações internacionais","valor":500000,"periodo":"mensal"},
+  {"id":"corporativo","nome":"Corporativo","descricao":"Empresas e instituições: até 5 representantes e visibilidade de marca","valor":1000000,"periodo":"mensal"}
+]'::jsonb where chave = 'planos';
+insert into definicoes (chave, valor) values ('limite', jsonb_build_object('max', 100, 'ate', to_char(current_date + interval '2 years', 'YYYY-MM-DD')))
+on conflict (chave) do nothing;
+
+create or replace function pedir_quota() returns quotas
+language plpgsql security definer set search_path = cgl as $$
+declare v_m membros; v_plano jsonb; v_q quotas;
+begin
+  select * into v_m from membros where perfil_id = auth.uid();
+  if not found then raise exception 'Faça primeiro o pedido de adesão.'; end if;
+  if v_m.estado in ('rejeitado', 'suspenso') then raise exception 'A sua adesão não está activa. Contacte o clube.'; end if;
+  select * into v_q from quotas where membro_id = v_m.id and estado = 'pendente' order by criado_em desc limit 1;
+  if found then return v_q; end if;
+  select p into v_plano from definicoes d, jsonb_array_elements(d.valor) p where d.chave = 'planos' and p->>'id' = v_m.plano;
+  if v_plano is null then raise exception 'Categoria de membro não encontrada. Contacte o clube.'; end if;
+  insert into quotas (membro_id, referencia, plano, descricao, valor, meses)
+  values (v_m.id, 'M-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 6)), v_plano->>'nome',
+          'Mensalidade ' || (v_plano->>'nome'),
+          coalesce((v_plano->>'valor')::int, 0), case when v_plano->>'periodo' = 'anual' then 12 else 1 end)
+  returning * into v_q;
+  return v_q;
+end $$;
+
+create or replace function guard_membros() returns trigger language plpgsql security definer set search_path = cgl as $$
+declare v_lim jsonb; v_n int;
+begin
+  if auth.uid() is not null and not is_admin() then
+    if tg_op = 'INSERT' then
+      new.perfil_id := auth.uid(); new.estado := 'pendente'; new.numero := null; new.quota_ate := null; new.aprovado_em := null; new.nota_admin := '';
+    else
+      new.perfil_id := old.perfil_id; new.estado := old.estado; new.numero := old.numero; new.quota_ate := old.quota_ate;
+      new.aprovado_em := old.aprovado_em; new.nota_admin := old.nota_admin; new.plano := case when old.estado = 'pendente' then new.plano else old.plano end;
+    end if;
+  end if;
+  if new.estado = 'activo' and (tg_op = 'INSERT' or old.estado <> 'activo') then
+    select valor into v_lim from definicoes where chave = 'limite';
+    if v_lim is not null and coalesce((v_lim->>'max')::int, 0) > 0 and (v_lim->>'ate' is null or current_date <= (v_lim->>'ate')::date) then
+      perform pg_advisory_xact_lock(hashtext('cgl_limite_membros'));
+      select count(*) into v_n from membros where estado = 'activo' and id <> new.id;
+      if v_n >= (v_lim->>'max')::int then
+        raise exception 'Limite de % membros atingido até %. A candidatura fica em lista de espera.', v_lim->>'max', to_char((v_lim->>'ate')::date, 'DD/MM/YYYY');
+      end if;
+    end if;
+  end if;
+  if new.estado = 'activo' and new.numero is null then
+    new.numero := 'CGL-' || lpad(nextval('membros_numero_seq')::text, 4, '0');
+    new.aprovado_em := coalesce(new.aprovado_em, now());
+  end if;
+  return new;
+end $$;
+
+create or replace function vagas_clube() returns json
+language sql stable security definer set search_path = cgl as $$
+  select json_build_object('max', coalesce((d.valor->>'max')::int, 0), 'ate', d.valor->>'ate',
+    'activos', (select count(*) from membros where estado = 'activo'),
+    'em_espera', (select count(*) from membros where estado = 'pendente'))
+  from definicoes d where d.chave = 'limite';
+$$;
+grant execute on function vagas_clube() to anon, authenticated;
+
+alter table direccao add column if not exists orgao text not null default 'Direcção';
+alter table direccao add column if not exists organizacao text not null default '';
