@@ -389,7 +389,7 @@
           var r = await sb.auth.signUp({ email: String(d.get("email")).trim(), password: d.get("pw"), options: { data: { nome: ad.nome, telefone: ad.telefone, adesao: ad, origem: "cgl" }, emailRedirectTo: location.origin + location.pathname + "#/conta" } });
           var dd = ok(r);
           if (dd.session) { await carregarConta(); desenharTopo(); location.hash = "#/conta"; }
-          else out.innerHTML = '<div class="msg msg--ok"><b>Quase lá!</b> Enviámos um email para <b>' + esc(d.get("email")) + "</b>. Abra o link para confirmar a conta. O pedido de adesão fica registado no primeiro acesso.</div>";
+          else out.innerHTML = '<div class="msg msg--ok"><b>Quase lá!</b> Enviámos um email para <b>' + esc(d.get("email")) + "</b>. O seu pedido de adesão já ficou registado.<br><br><b>Para activar a conta:</b> abra o email e clique no link de confirmação. Se a página que abrir der erro, não se preocupe: a conta fica confirmada na mesma. Volte a <b>clubgloballideres.org</b>, clique em <b>Entrar</b> e use o seu email e palavra-passe. Veja também a pasta de spam.</div>";
         }
       } catch (x) { out.innerHTML = '<div class="msg msg--mau">' + esc(traduz(x).message) + "</div>"; }
       finally { b.disabled = false; }
